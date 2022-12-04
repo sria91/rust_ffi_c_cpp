@@ -1,6 +1,5 @@
-use std::{ffi::{CString, CStr}, error::Error};
+use std::{ffi::{CString, CStr, c_char, c_int}, error::Error};
 
-use libc::{c_char, c_int};
 
 #[link(name = "c_cpp")]  // name of the C shared library
 extern "C" {

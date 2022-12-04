@@ -1,5 +1,9 @@
 # A tutorial for accessing C/C++ functions within a shared library (.dll/.so/.dylib) from Rust
 
+_[05-12-2022] Updates:_
++ _Removed libc dependency in favour of std::ffi in the Rust wrapper_
++ _In the C/C++ example, used cmake instead of msbuild as it is more cross-platform._
+
 ## Background
 
 At my workplace, we are developing algorithms for a cloud-based analysis app. The algorithms are written in C++ and exported as a shared library to be used by the middleware in Java and the front end in JavaScript. Everything was working except for one problem, the service we had deployed faced the issue of memory pile-up. And since all the different components were tightly coupled it became very difficult to debug the issue.
@@ -84,8 +88,8 @@ I'll build the shared library and the test executable using the following comman
 
 ```bat
 cd c_cpp
-cmake.exe -S . -B build
-msbuild build\c_cpp.sln
+cmake -S . -B .\build\
+cmake --build .\build\
 ```
 
 Running the test executable should be straightforward:
@@ -101,18 +105,11 @@ For developing the Rust wrapper I'm first going to create a library project usin
 C:\rust_ffi_c_cpp> cargo new --lib rust_ffi
 ```
 
-We are going to use the `libc` crate for working with the C types. So add the following line to `Cargo.toml` under `[dependencies]`:
-```toml
-libc = "0.2.137"
-```
-
 Now replace the contents of the `rust_ffi\src\lib.rs` file with the following:
 ```rs
-use std::{ffi::{CString, CStr}, error::Error};
+use std::{ffi::{CString, CStr, c_char, c_int}, error::Error};
 
-use libc::{c_char, c_int};
-
-#[link(name = "c_cpp")]  // name of the C shared library
+#[link(name = "c_cpp")]  // name of the C/C++ shared library
 extern "C" {
     fn introduce(name: *const c_char, age: c_int) -> *const c_char;
 }
@@ -133,11 +130,9 @@ pub fn introduce_rust(name: &str, age: c_int) -> Result<String, Box<dyn Error>> 
 }
 ```
 
-The first `use` line imports standard library features related to handling C-style strings and the Error trait.
+The first `use` line imports standard library features related to handling C-style strings, the C types and the Error trait.
 
-The second `use` line imports the C types from `libc`.
-
-The next block of code is where we specify the name of the C shared library and the function(s) within it that we are going to use. In our case, the signature of the function(s) should match those in the `c_cpp\include\lib.h` file.
+The next block of code is where we specify the name of the C/C++ shared library and the function(s) within it that we are going to use. In our case, the signature of the function(s) should match those in the `c_cpp\include\lib.h` file.
 
 The `get_str_slice_from_c_char_ptr` convenience function is the one that converts the raw `const char *` pointer from C to a `&str` in Rust. It makes use of an `unsafe` code block to accomplish this.
 
@@ -163,7 +158,7 @@ set RUSTFLAGS=-L..\c_cpp\build\Debug
 cargo build
 ```
 
-The first command sets the Rust linker flag `-L` to the path containing the C shared library. And the second command builds the project.
+The first command sets the Rust linker flag `-L` to the path containing the C/C++ shared library. And the second command builds the project.
 
 Now we can run the built Rust executable by using the following commands from the `rust_ffi` directory:
 ```bat

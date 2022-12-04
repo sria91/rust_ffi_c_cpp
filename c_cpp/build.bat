@@ -1,4 +1,4 @@
 @echo off
 
-cmake.exe -S . -B build
-msbuild build\c_cpp.sln
+cmake -S . -B .\build\
+cmake --build .\build\
