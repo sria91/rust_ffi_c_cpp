@@ -6,4 +6,6 @@
 
 extern "C" {
     EXPORT const char * introduce(const char * name, int age);
+
+    EXPORT void deallocate_string(const char * s);
 }

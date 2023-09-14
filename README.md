@@ -1,6 +1,7 @@
 # A tutorial for accessing C/C++ functions within a shared library (.dll/.so/.dylib) from Rust
 
-_[05-12-2022] Updates:_
+_[14-09-2023] Updates:_
++ _Update code and add information to prevent memory leakage when returning a heap-allocated object through the FFI_
 + _Removed libc dependency in favour of std::ffi in the Rust wrapper_
 + _In the C/C++ example, used cmake instead of msbuild as it is more cross-platform._
 
@@ -18,11 +19,11 @@ Having some prior experience with Rust (especially REST web service development 
 
 Let's start with some of the basics first.
 
-1.  Consider, we are developing a shared library named `c_cpp`. The shared library file will be called `c_ccp.dll` in Windows, `libc_cpp.so` in Linux, and `libc_cpp.dylib` in macOS.
+1. Consider, we are developing a shared library named `c_cpp`. The shared library file will be called `c_ccp.dll` in Windows, `libc_cpp.so` in Linux, and `libc_cpp.dylib` in macOS.
     
-2.  When you compile a C++ function its name gets mangled, and Rust won't know how to call it. Hence, If you are writing a C++ function you need to put it in your header(s) within the `extern "C" { }` block. This tells the C++ compiler not to mangle its name.
+2. When you compile a C++ function its name gets mangled, and Rust won't know how to call it. Hence, If you are writing a C++ function you need to put it in your header(s) within the `extern "C" { }` block. This tells the C++ compiler not to mangle its name.
     
-3.  If you are writing a C function you don't have to put it inside the `extern "C" { }` block, as the Rust compiler knows how to call it.
+3. If you are writing a C function you don't have to put it inside the `extern "C" { }` block, as the Rust compiler knows how to call it.
     
 
 ## The C/C++ example
@@ -58,6 +59,43 @@ const char * introduce(const char * name, int age) {
 }
 ```
 
+To the above code files, we will also add the `deallocate_string` function. This will aid in preventing memory leaks that can occur if the heap-allocated string is not deallocated. We are going to call this function from the Rust wrapper.
+
+`c_cpp\include\lib.h`
+
+```cpp
+#if defined(WIN32) || defined(_WIN32)
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT
+#endif
+
+extern "C" {
+    EXPORT const char * introduce(const char * name, int age);
+
+    EXPORT void deallocate_string(const char * s);
+}
+```
+
+`c_cpp\src\lib.cpp`
+
+```cpp
+#include <sstream>
+#include "lib.h"
+
+std::stringstream ss;
+
+const char * introduce(const char * name, int age) {
+    ss.clear();
+    ss << "Hi, I am " << name << ". My age is " << age << ".";
+    return strdup(ss.str().c_str());
+}
+
+void deallocate_string(const char * s) {
+    delete[] s;
+}
+```
+
 I'm also going to create the main source file (`c_cpp\src\main.cpp`) to build an executable and quickly test my function.
 
 ```cpp
@@ -66,13 +104,18 @@ I'm also going to create the main source file (`c_cpp\src\main.cpp`) to build an
 #include "lib.h"
 
 int main() {
-    std::cout << introduce("Srikanth", 31) << std::endl;
+    const char * s = introduce("Srikanth", 31);
+    std::cout << s << std::endl;
+
+    deallocate_string(s);
+
+    return 0;
 }
 ```
 
 I will use CMake as the build tool. So, the following is my `c_cpp\CMakeLists.txt` file.
 
-```cmake
+```plaintext
 cmake_minimum_required(VERSION 3.24)
 
 project("c_cpp")
@@ -86,14 +129,15 @@ add_executable(${PROJECT_NAME}_main ./src/main.cpp ./src/lib.cpp)
 
 I'll build the shared library and the test executable using the following commands:
 
-```bat
+```plaintext
 cd c_cpp
 cmake -S . -B .\build\
 cmake --build .\build\
 ```
 
 Running the test executable should be straightforward:
-```bat
+
+```plaintext
 C:\rust_ffi_c_cpp\c_cpp> .\build\Debug\c_cpp_main.exe
 Hi, I am Srikanth. My age is 31.
 ```
@@ -101,17 +145,21 @@ Hi, I am Srikanth. My age is 31.
 ## The Rust wrapper
 
 For developing the Rust wrapper I'm first going to create a library project using cargo.
-```bat
+
+```plaintext
 C:\rust_ffi_c_cpp> cargo new --lib rust_ffi
 ```
 
 Now replace the contents of the `rust_ffi\src\lib.rs` file with the following:
-```rs
+
+```rust
 use std::{ffi::{CString, CStr, c_char, c_int}, error::Error};
 
-#[link(name = "c_cpp")]  // name of the C/C++ shared library
+#[link(name = "c_cpp")]  // name of the C shared library
 extern "C" {
     fn introduce(name: *const c_char, age: c_int) -> *const c_char;
+
+    fn deallocate_string(s: *const c_char);
 }
 
 fn get_str_slice_from_c_char_ptr<'a>(input_c_char: *const c_char) -> Result<&'a str, Box<dyn Error>> {
@@ -126,6 +174,7 @@ pub fn introduce_rust(name: &str, age: c_int) -> Result<String, Box<dyn Error>> 
     let name = CString::new(name)?;
     let introduction = unsafe { introduce(name.as_ptr(), age) };
     let introduction_string = get_str_slice_from_c_char_ptr(introduction)?.to_string();
+    unsafe { deallocate_string(introduction) };
     Ok(introduction_string)
 }
 ```
@@ -136,7 +185,7 @@ The next block of code is where we specify the name of the C/C++ shared library 
 
 The `get_str_slice_from_c_char_ptr` convenience function is the one that converts the raw `const char *` pointer from C to a `&str` in Rust. It makes use of an `unsafe` code block to accomplish this.
 
-The `introduce_rust` function is the actual wrapper around the `introduce` C/C++ function. It takes the first input parameter as `&str` and converts it into a C-style string. The second parameter is an integer and is passed as it is. This function also makes use of an unsafe code block for the C function. Then it makes use of the `get_str_slice_from_c_char_ptr` convenience function to convert the returned C-style string into a Rust `String`.
+The `introduce_rust` function is the actual wrapper around the `introduce` C/C++ function. It takes the first input parameter as `&str` and converts it into a C-style string. The second parameter is an integer and is passed as it is. This function also makes use of an unsafe code block for the C function. Then it makes use of the `get_str_slice_from_c_char_ptr` convenience function to convert the returned C-style string into a Rust `String`. And it deallocates the c-string to prevent memory leakage.
 
 In order to test that our approach actually works let's write a `rust_ffi\src\main.rs`. Following are its contents:
 
@@ -153,7 +202,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 We can build our project by using the following commands from the `rust_ffi` directory:
-```bat
+
+```plaintext
 set RUSTFLAGS=-L..\c_cpp\build\Debug
 cargo build
 ```
@@ -161,13 +211,15 @@ cargo build
 The first command sets the Rust linker flag `-L` to the path containing the C/C++ shared library. And the second command builds the project.
 
 Now we can run the built Rust executable by using the following commands from the `rust_ffi` directory:
-```bat
+
+```plaintext
 set PATH=..\c_cpp\build\Debug;%PATH%
 target\debug\rust_ffi.exe
 ```
 
 And voila we get our expected output:
-```bat
+
+```plaintext
 Hi, I am Srikanth. My age is 31.
 ```
 
