@@ -1,6 +1,7 @@
 # A tutorial for accessing C/C++ functions within a shared library (.dll/.so/.dylib) from Rust
 
-_[14-09-2023] Updates:_
+_[15-09-2023] Updates:_
++ Include `<cstring>` in the code and use `free` instead of `delete` as `strdup` generally uses `malloc` to allocate
 + _Update code and add information to prevent memory leakage when returning a heap-allocated object through the FFI_
 + _Removed libc dependency in favour of std::ffi in the Rust wrapper_
 + _In the C/C++ example, used cmake instead of msbuild as it is more cross-platform._
@@ -48,6 +49,7 @@ Following is the function definition in the source file (`c_cpp\src\lib.cpp`).
 
 ```cpp
 #include <sstream>
+#include <cstring>
 #include "lib.h"
 
 std::stringstream ss;
@@ -81,6 +83,8 @@ extern "C" {
 
 ```cpp
 #include <sstream>
+#include <cstdlib>
+#include <cstring>
 #include "lib.h"
 
 std::stringstream ss;
@@ -92,7 +96,7 @@ const char * introduce(const char * name, int age) {
 }
 
 void deallocate_string(const char * s) {
-    delete[] s;
+    free((void*)s);
 }
 ```
 
