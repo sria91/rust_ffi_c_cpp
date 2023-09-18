@@ -1,6 +1,7 @@
 # A tutorial for accessing C/C++ functions within a shared library (.dll/.so/.dylib) from Rust
 
-_[15-09-2023] Updates:_
+_[19-09-2023] Updates:_
++ Fix the reason why not to link to C++ functions directly
 + Include `<cstring>` in the code and use `free` instead of `delete` as `strdup` generally uses `malloc` to allocate
 + _Update code and add information to prevent memory leakage when returning a heap-allocated object through the FFI_
 + _Removed libc dependency in favour of std::ffi in the Rust wrapper_
@@ -22,7 +23,7 @@ Let's start with some of the basics first.
 
 1. Consider, we are developing a shared library named `c_cpp`. The shared library file will be called `c_ccp.dll` in Windows, `libc_cpp.so` in Linux, and `libc_cpp.dylib` in macOS.
     
-2. When you compile a C++ function its name gets mangled, and Rust won't know how to call it. Hence, If you are writing a C++ function you need to put it in your header(s) within the `extern "C" { }` block. This tells the C++ compiler not to mangle its name.
+2. It is not a good idea to link to C++ functions directly, as C++ doesn't have a stable ABI. Hence, If you are writing a C++ function you need to put it in your header(s) within the `extern "C" { }` block. This also tells the C++ compiler not to mangle its name.
     
 3. If you are writing a C function you don't have to put it inside the `extern "C" { }` block, as the Rust compiler knows how to call it.
     
