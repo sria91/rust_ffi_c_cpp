@@ -1,6 +1,7 @@
 # A tutorial for accessing C/C++ functions within a shared library (.dll/.so/.dylib) from Rust
 
 _[19-09-2023] Updates:_
++ Add instructions and code for an alternative way to build and run using `build.rs` and cmake-rs
 + Fix the reason why not to link to C++ functions directly
 + Include `<cstring>` in the code and use `free` instead of `delete` as `strdup` generally uses `malloc` to allocate
 + _Update code and add information to prevent memory leakage when returning a heap-allocated object through the FFI_
@@ -130,6 +131,8 @@ include_directories(./include)
 add_library(${PROJECT_NAME} SHARED ./src/lib.cpp)
 
 add_executable(${PROJECT_NAME}_main ./src/main.cpp ./src/lib.cpp)
+
+install(TARGETS ${PROJECT_NAME} DESTINATION .)
 ```
 
 I'll build the shared library and the test executable using the following commands:
@@ -227,5 +230,42 @@ And voila we get our expected output:
 ```plaintext
 Hi, I am Srikanth. My age is 31.
 ```
+### An alternative way to build and run the Rust wrapper using build.rs and cmake-rs
+
+Being in the same Rust project modify `rust_ffi\Cargo.toml` to look like as follows:
+
+```ini
+[package]
+name = "rust_ffi"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+cmake = "0.1.50"
+```
+
+And add `rust_ffi\build.rs` with the following contents:
+
+```rust
+use std::path::Path;
+use cmake::Config;
+
+fn main()
+{
+    let dst = Config::new(Path::new("..").join("c_cpp")).build();
+
+    println!("cargo:rustc-link-search=native={}", dst.display());
+    println!("cargo:rustc-link-lib=dylib=c_cpp");
+}
+```
+
+Now one can simply run from the `rust_ffi` directory, the command `cargo build` to build the C/C++ shared library and the Rust executable in one shot. One can also run the Rust executable by simply running the command `cargo run`.
 
 [Link to the code](https://github.com/sria91/rust_ffi_c_cpp.git)
+
+[Try online in a new Codespace](https://codespace.new/sria91/rust_ffi_c_cpp)

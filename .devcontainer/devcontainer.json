@@ -14,9 +14,6 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"ms-vscode.cpptools",
-				"twxs.cmake",
-				"ms-vscode.cmake-tools",
 				"vadimcn.vscode-lldb",
 				"serayuzgur.crates",
 				"rust-lang.rust-analyzer"
